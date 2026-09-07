@@ -12,11 +12,11 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from aquilante.data.adapters import synthetic_dataset  # noqa: E402
-from aquilante.evaluation.metrics import summarize  # noqa: E402
-from aquilante.features.sequences import split_by_student  # noqa: E402
-from aquilante.models.neural import NeuralModel, make_batch  # noqa: E402
-from aquilante.training.trainer import (  # noqa: E402
+from sabelia.data.adapters import synthetic_dataset  # noqa: E402
+from sabelia.evaluation.metrics import summarize  # noqa: E402
+from sabelia.features.sequences import split_by_student  # noqa: E402
+from sabelia.models.neural import NeuralModel, make_batch  # noqa: E402
+from sabelia.training.trainer import (  # noqa: E402
     TrainConfig,
     load_checkpoint,
     save_checkpoint,
@@ -30,7 +30,7 @@ def split():
     return split_by_student(ds, seed=0)
 
 
-@pytest.mark.parametrize("kind", ["dkt", "aquilante"])
+@pytest.mark.parametrize("kind", ["dkt", "sabelia"])
 def test_models_are_causal_and_finite(split, kind):
     tr, _, te = split
     m = NeuralModel(kind, tr.vocab.n_concepts, tr.vocab.n_items, {"max_len": 50})
@@ -46,7 +46,7 @@ def test_models_are_causal_and_finite(split, kind):
 def test_training_reduces_loss_and_is_reproducible(split):
     tr, va, te = split
     cfg = TrainConfig(
-        model="aquilante",
+        model="sabelia",
         model_config={"max_len": 50, "d_model": 32, "heads": 2},
         epochs=3,
         patience=3,
@@ -108,8 +108,8 @@ def test_service_serves_state_and_falls_back(split, tmp_path: Path):
     fastapi = pytest.importorskip("fastapi")  # noqa: F841
     from fastapi.testclient import TestClient  # noqa: PLC0415
 
-    from aquilante.inference.service import create_app  # noqa: PLC0415
-    from aquilante.simulation.simulator import SimulatorConfig, simulate  # noqa: PLC0415
+    from sabelia.inference.service import create_app  # noqa: PLC0415
+    from sabelia.simulation.simulator import SimulatorConfig, simulate  # noqa: PLC0415
 
     app = create_app(model_dir=None)
     client = TestClient(app)

@@ -18,9 +18,9 @@ jobs:
           uv pip install --python .venv/bin/python -e ".[dev]"
       - name: lint
         run: |
-          .venv/bin/ruff check aquilante tests scripts
-          .venv/bin/ruff format --check aquilante tests scripts
+          .venv/bin/ruff check sabelia tests scripts
+          .venv/bin/ruff format --check sabelia tests scripts
       - name: tests
         run: .venv/bin/pytest -p no:warnings
       - name: the pipeline runs end to end
-        run: .venv/bin/aquilante benchmark --dataset configs/datasets/synthetic-small.yaml --quick --out /tmp/runs
+        run: .venv/bin/sabelia benchmark --dataset configs/datasets/synthetic-small.yaml --quick --out /tmp/runs

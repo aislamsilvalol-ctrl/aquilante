@@ -1,7 +1,7 @@
-# Aquilante — Research notes
+# Sabelia — Research notes
 
 What the field knows about modelling a learner from interaction data, what
-it does not, and what that implies for Aquilante's first version. Written
+it does not, and what that implies for Sabelia's first version. Written
 before the architecture was fixed; the choices at the end are the ones the
 code implements. Claims carry a source. Citations were checked against the papers and
 dataset pages on 2026-09-07; the few that were not are marked
@@ -45,7 +45,7 @@ simpleKT reports 0.774 ± 0.002 against AKT 0.785 ± 0.002 and DKT 0.754 ±
 0.001 (simpleKT, Table 2). Anything far above 0.85 on this dataset is a
 leakage red flag.
 
-**What this implies.** Aquilante V0 must ship logistic baselines with
+**What this implies.** Sabelia V0 must ship logistic baselines with
 temporal features (PFA, and a DAS3H-style time-window variant is the natural
 next addition) and must beat them on held-out learners before any neural
 claim is made. The neural candidate should be small, attention-based, and
@@ -58,8 +58,8 @@ literature shows matter and that most public implementations leave out.
 |---|---|---|
 | Ebbinghaus (1885), *Über das Gedächtnis*; replication: Murre & Dros, PLOS ONE 2015. https://doi.org/10.1371/journal.pone.0120644 | Retention falls steeply then slowly; a power or exponential-in-log-time curve | Shape of the decay; the simulator uses log-time decay |
 | Anderson & Schooler, *Reflections of the environment in memory*, Psychological Science 1991 (ACT-R base-level activation) | Activation = log of the sum of practice recencies to a power; recall is a logistic function of activation | Motivates counting *when* practices happened, not only how many |
-| Settles & Meeder, *A Trainable Spaced Repetition Model for Language Learning*, ACL 2016. https://aclanthology.org/P16-1174/ | Half-life regression: p = 2^(−Δt/h), h = 2^(θ·x), θ learned from recall logs | **Adopted**: `aquilante.memory.HalfLifeModel` is this model with per-concept counts and difficulty as features |
-| FSRS (open-source scheduler, Jarrett Ye et al.), https://github.com/open-spaced-repetition/fsrs4anki | Difficulty–Stability–Retrievability state with a power forgetting curve and parameters fitted per user | Noema already runs FSRS-4.5 for flashcards; Aquilante's recall estimate must agree with it in spirit (same state, same curve) and can consume its reviews as events |
+| Settles & Meeder, *A Trainable Spaced Repetition Model for Language Learning*, ACL 2016. https://aclanthology.org/P16-1174/ | Half-life regression: p = 2^(−Δt/h), h = 2^(θ·x), θ learned from recall logs | **Adopted**: `sabelia.memory.HalfLifeModel` is this model with per-concept counts and difficulty as features |
+| FSRS (open-source scheduler, Jarrett Ye et al.), https://github.com/open-spaced-repetition/fsrs4anki | Difficulty–Stability–Retrievability state with a power forgetting curve and parameters fitted per user | Noema already runs FSRS-4.5 for flashcards; Sabelia's recall estimate must agree with it in spirit (same state, same curve) and can consume its reviews as events |
 | DAS3H (above) | Time-window counts in a logistic model | Baseline to add; cheap and strong where timestamps exist |
 
 **Distinction kept in the code.** *Mastery* (would they answer correctly
@@ -74,12 +74,12 @@ what-to-learn decisions.
 - NeuralCD (Wang et al., *Neural Cognitive Diagnosis for Intelligent Education Systems*, AAAI 2020. https://arxiv.org/abs/1908.08066) learns a monotone diagnosis from a Q-matrix. Same dependency.
 - GKT (Nakagawa, Iwasawa & Matsuo, *Graph-based Knowledge Tracing: Modeling Student Proficiency Using Graph Neural Network*, WI 2019. https://doi.org/10.1145/3350546.3352513) propagates the update of one concept to its neighbours. The paper reports at best a 6.25 % relative AUC improvement over DKT/DKVMN on ASSISTments and KDD Cup; pyKT's re-evaluation places GKT below DKT on ASSISTments 2009 (0.742 vs 0.754). Modest, and dependent on graph quality.
 
-**Decision.** The prerequisite graph enters Aquilante V0 in two places
+**Decision.** The prerequisite graph enters Sabelia V0 in two places
 that need no GNN: the simulator (transfer and penalty along prerequisite
 edges, so the pipeline is tested on graph-shaped data) and the policy
 (LEARN only when prerequisites are ready; EXPLAIN cites a weak prerequisite).
 A GNN is a V2 experiment with a clear falsification criterion: it must beat
-Aquilante-with-prerequisite-features on held-out learners.
+Sabelia-with-prerequisite-features on held-out learners.
 
 ## 4. Uncertainty and calibration
 
@@ -106,7 +106,7 @@ a right one moves it up. V2.5 in the roadmap; the policy already emits
 
 - Rule/score policies remain the reference in tutoring systems; they are
   what a learned policy must beat on learning gain, not on clicks.
-- Clement, Roy, Oudeyer & Lopes, *Multi-Armed Bandits for Intelligent Tutoring Systems*, JEDM 7(2):20–48, 2015. https://jedm.educationaldatamining.org/index.php/JEDM/article/view/JEDM111 (arXiv https://arxiv.org/abs/1310.3174) — bandits over activities with *learning progress* as the reward. The right reward for Aquilante.
+- Clement, Roy, Oudeyer & Lopes, *Multi-Armed Bandits for Intelligent Tutoring Systems*, JEDM 7(2):20–48, 2015. https://jedm.educationaldatamining.org/index.php/JEDM/article/view/JEDM111 (arXiv https://arxiv.org/abs/1310.3174) — bandits over activities with *learning progress* as the reward. The right reward for Sabelia.
 - Reinforcement learning for tutoring has a long record of simulator-only wins that did not transfer (a review: Doroudi, Aleven & Brunskill, *Where's the Reward? A Review of Reinforcement Learning for Instructional Sequencing*, IJAIED 2019. https://doi.org/10.1007/s40593-019-00187-x). Adopt bandits only with real outcome data; RL not before that.
 
 ## 7. Datasets
@@ -129,7 +129,7 @@ is what the forgetting model and the time features need. No dataset is
 fetched by the code; the user downloads under the dataset's licence, and
 both EdNet and Duolingo are non-commercial licences.
 
-## 8. What Aquilante V0 does, given the above
+## 8. What Sabelia V0 does, given the above
 
 1. **Learner state = three numbers per concept** — mastery (sequence
    model), confidence (MC-dropout spread × evidence), recall (half-life

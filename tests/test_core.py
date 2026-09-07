@@ -8,16 +8,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from aquilante.data.adapters import jsonl_dataset, synthetic_dataset, write_jsonl
-from aquilante.data.schema import SCHEMA_VERSION, EventType, LearningEvent, upgrade
-from aquilante.evaluation.metrics import auc, expected_calibration_error, log_loss, summarize
-from aquilante.experiments.registry import ExperimentRun, Registry
-from aquilante.features.sequences import split_by_student
-from aquilante.inference.learner import Learner
-from aquilante.memory.forgetting import HalfLifeModel, recall_probability
-from aquilante.models.baselines import BKT, PFA, ConceptMean, GlobalMean, MasteryHeuristic
-from aquilante.policy.rules import Action, recommend
-from aquilante.simulation.simulator import SimulatorConfig, simulate
+from sabelia.data.adapters import jsonl_dataset, synthetic_dataset, write_jsonl
+from sabelia.data.schema import SCHEMA_VERSION, EventType, LearningEvent, upgrade
+from sabelia.evaluation.metrics import auc, expected_calibration_error, log_loss, summarize
+from sabelia.experiments.registry import ExperimentRun, Registry
+from sabelia.features.sequences import split_by_student
+from sabelia.inference.learner import Learner
+from sabelia.memory.forgetting import HalfLifeModel, recall_probability
+from sabelia.models.baselines import BKT, PFA, ConceptMean, GlobalMean, MasteryHeuristic
+from sabelia.policy.rules import Action, recommend
+from sabelia.simulation.simulator import SimulatorConfig, simulate
 
 # ── schema ────────────────────────────────────────────────────────────────
 
@@ -291,14 +291,14 @@ def test_registry_records_runs_and_promotes_one_production_version(tmp_path: Pat
         )
     )
     assert reg.runs()[0]["git"] is None or isinstance(reg.runs()[0]["git"], str)
-    reg.register("aquilante", "v1", payload={}, metrics={"auc": 0.7}, status="staging")
-    reg.register("aquilante", "v2", payload={}, metrics={"auc": 0.72})
-    reg.set_status("aquilante", "v1", "production")
-    reg.set_status("aquilante", "v2", "production")
-    statuses = {m["version"]: m["status"] for m in reg.versions("aquilante")}
+    reg.register("sabelia", "v1", payload={}, metrics={"auc": 0.7}, status="staging")
+    reg.register("sabelia", "v2", payload={}, metrics={"auc": 0.72})
+    reg.set_status("sabelia", "v1", "production")
+    reg.set_status("sabelia", "v2", "production")
+    statuses = {m["version"]: m["status"] for m in reg.versions("sabelia")}
     assert statuses == {"v1": "deprecated", "v2": "production"}
-    assert reg.production("aquilante").name == "v2"
-    meta = json.loads((reg.production("aquilante") / "model.json").read_text())
+    assert reg.production("sabelia").name == "v2"
+    meta = json.loads((reg.production("sabelia") / "model.json").read_text())
     assert meta["metrics"]["auc"] == 0.72
 
 
@@ -306,7 +306,7 @@ def test_registry_records_runs_and_promotes_one_production_version(tmp_path: Pat
 
 
 def test_ednet_kt1_adapter_reads_per_user_files(tmp_path: Path):
-    from aquilante.data.adapters import ednet_kt1_dataset
+    from sabelia.data.adapters import ednet_kt1_dataset
 
     (tmp_path / "questions.csv").write_text(
         "question_id,bundle_id,explanation_id,correct_answer,part,tags,deployed_at\n"
@@ -326,7 +326,7 @@ def test_ednet_kt1_adapter_reads_per_user_files(tmp_path: Path):
 
 
 def test_duolingo_hlr_adapter_emits_recall_events(tmp_path: Path):
-    from aquilante.data.adapters import duolingo_hlr_dataset
+    from sabelia.data.adapters import duolingo_hlr_dataset
 
     (tmp_path / "hlr.csv").write_text(
         "p_recall,timestamp,delta,user_id,learning_language,ui_language,lexeme_id,lexeme_string,history_seen,history_correct,session_seen,session_correct\n"
@@ -339,7 +339,7 @@ def test_duolingo_hlr_adapter_emits_recall_events(tmp_path: Path):
 
 
 def test_das3h_windows_only_count_earlier_events_and_beat_the_floor(small_split):
-    from aquilante.models.baselines import DAS3H
+    from sabelia.models.baselines import DAS3H
 
     tr, _, te = small_split
     m = DAS3H(epochs=8).fit(tr)

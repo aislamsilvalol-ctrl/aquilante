@@ -1,5 +1,5 @@
 [project]
-name = "aquilante"
+name = "sabelia"
 version = "0.1.0"
 description = "Adaptive Neural Learner Modeling Engine: knowledge, retention, uncertainty and the next learning action, from learning events."
 readme = "README.md"
@@ -28,14 +28,14 @@ service = ["fastapi>=0.110", "uvicorn>=0.27"]
 dev = ["pytest>=8", "ruff==0.16.6", "scikit-learn>=1.4", "pandas>=2.1", "httpx>=0.27"]
 
 [project.scripts]
-aquilante = "aquilante.cli:main"
+sabelia = "sabelia.cli:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["aquilante*"]
+include = ["sabelia*"]
 
 [tool.ruff]
 line-length = 110
@@ -47,7 +47,7 @@ select = ["E", "F", "I", "B", "UP", "N", "W"]
 ignore = ["N806", "N803"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["aquilante"]
+known-first-party = ["sabelia"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E501"]

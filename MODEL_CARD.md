@@ -1,11 +1,11 @@
-# Model card — Aquilante (sequence models for learner modeling)
+# Model card — Sabelia (sequence models for learner modeling)
 
 Following Mitchell et al., *Model Cards for Model Reporting* (FAT* 2019).
 
 ## Model details
 
 - **Models**: `dkt` (GRU over concept×outcome interactions; Piech et al. 2015)
-  and `aquilante` (causal self-attention over interaction embeddings with
+  and `sabelia` (causal self-attention over interaction embeddings with
   time gaps, response time, hints, item embeddings and a per-concept
   forgetting gate). Both output P(correct at t | events before t).
 - **Auxiliary models**: half-life regression for recall; BKT, PFA and
@@ -30,7 +30,7 @@ learner.
 ## Training data
 
 - V0 is trained and evaluated on **synthetic** data from
-  `aquilante.simulation` (documented generating process, seeded) and can be
+  `sabelia.simulation` (documented generating process, seeded) and can be
   trained on ASSISTments 2009 through its adapter. No real learner data is
   included in the repository.
 - Events carry pseudonymous learner ids and no text. Products are

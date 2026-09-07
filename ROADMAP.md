@@ -9,7 +9,7 @@ not get its number.
 - Features, learner split, metrics with calibration, registry.
 - Baselines: global/concept mean, recency heuristic, PFA, BKT.
 - Half-life forgetting model.
-- DKT and the Aquilante candidate with ablation switches; training loop.
+- DKT and the Sabelia candidate with ablation switches; training loop.
 - Learner state (mastery, confidence, recall), rule policy with reasons,
   service with fallback. Tests.
 - **Exit**: the benchmark runs end to end on synthetic data with every model
@@ -22,7 +22,7 @@ not get its number.
   logistic baseline.
 - Benchmark on at least one public dataset with timestamps, three seeds,
   with the literature's cleaned numbers beside the table.
-- **Exit**: Aquilante ≥ the best logistic baseline in AUC *and* log loss on
+- **Exit**: Sabelia ≥ the best logistic baseline in AUC *and* log loss on
   held-out learners of a public dataset, or the README says it is not.
 
 ## V1.5 — forgetting and uncertainty
@@ -35,7 +35,7 @@ not get its number.
 ## V2 — the prerequisite graph in the model
 
 - Prerequisite-aware features (state of prerequisites at query time) in
-  both the logistic baseline and Aquilante; a GNN variant.
+  both the logistic baseline and Sabelia; a GNN variant.
 - **Exit**: the GNN variant beats the feature variant on held-out learners,
   or it is dropped and the report says why.
 

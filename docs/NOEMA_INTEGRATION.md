@@ -1,4 +1,4 @@
-# Aquilante ↔ NOEMA — Phase 0 audit and the integration plan
+# Sabelia ↔ NOEMA — Phase 0 audit and the integration plan
 
 What the product records today, what a learner model needs, and the
 smallest changes that close the gap. This is the boundary between the
@@ -60,19 +60,19 @@ Two blockers stand out: **no stable concept id on `MasteryEvent`**, and
    Add `elapsed_ms`, `difficulty`, `confidence`, `item_id` (the block id)
    and `session_id` to `MasteryEvent`. Make `kind` an enum.
 3. **Version the projection.** Stamp `model_version` on
-   `StudentConceptState` when `project()` runs, so a later Aquilante
+   `StudentConceptState` when `project()` runs, so a later Sabelia
    projection can be compared with today's rule on the same events.
 4. **Export pseudonymously.** A job that emits `LearningEvent` JSONL with
    `student_id = HMAC(secret, user_id)`, one file per day, from both
    trails: `Review` → `recall` events, `Answer` and quiz/check
    `MasteryEvent`s → `answer` events, teaching turns that introduced a
    concept → `exposure` events. Identity never leaves the product.
-5. **Consume, with a fallback.** The Professor Engine asks the Aquilante
+5. **Consume, with a fallback.** The Professor Engine asks the Sabelia
    service for `state` and `recommend` before choosing a move; the
    recommendation and its reason codes are added to the turn's decision
    record (`TeachingTurn.decision`), and the existing rule-based router
    remains the path when the service is absent or slow (a 150 ms budget).
-   The move stays the Professor's; Aquilante says *what the learner
+   The move stays the Professor's; Sabelia says *what the learner
    needs* ("REVIEW defense_mechanisms: recall_predicted 0.54,
    days_since_practice 8, prerequisite_weak unconscious"), the Professor
    says it ("Antes de continuarmos, quero testar uma coisa…").
@@ -80,7 +80,7 @@ Two blockers stand out: **no stable concept id on `MasteryEvent`**, and
 ## What must not cross the boundary
 
 NOEMA keeps: users, e-mails, conversations, prompts, billing, its own
-tables. Aquilante receives: pseudonymous events. Nothing in the engine
+tables. Sabelia receives: pseudonymous events. Nothing in the engine
 reads NOEMA's database; the adapter is a JSONL file the product writes.
 
 ## Status (2026-09-07)
@@ -96,7 +96,7 @@ reads NOEMA's database; the adapter is a JSONL file the product writes.
 - Step 4: **done** — `noema/services/learning_export.py` and
   `scripts/export-learning-events.py` emit LearningEvent v1 JSONL with HMAC
   pseudonyms and no text (`NOEMA_EXPORT_SECRET`, 16+ characters).
-- Step 5: not started, by design — waits for Aquilante V1.
+- Step 5: not started, by design — waits for Sabelia V1.
 
 ## Order of work
 
