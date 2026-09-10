@@ -15,7 +15,14 @@ from sabelia.experiments.registry import ExperimentRun, Registry
 from sabelia.features.sequences import split_by_student
 from sabelia.inference.learner import Learner
 from sabelia.memory.forgetting import HalfLifeModel, recall_probability
-from sabelia.models.baselines import BKT, PFA, ConceptMean, GlobalMean, MasteryHeuristic
+from sabelia.models.baselines import (
+    BKT,
+    PFA,
+    ConceptMean,
+    GlobalMean,
+    ItemMean,
+    MasteryHeuristic,
+)
 from sabelia.policy.rules import Action, recommend
 from sabelia.simulation.simulator import SimulatorConfig, simulate
 
@@ -379,3 +386,51 @@ def test_das3h_windows_only_count_earlier_events_and_beat_the_floor(small_split)
     assert np.all(wins[:, -1] >= wins[:, 1])
     r = summarize(*m.predict_dataset(te))
     assert r.auc > 0.55 and np.isfinite(r.log_loss)
+
+
+def test_a_blend_weighs_a_useless_component_at_zero(small_split):
+    """Two components that say the same thing, and one that says noise."""
+    from sabelia.models.stacking import Stacked
+
+    tr, va, te = small_split
+    heuristic = MasteryHeuristic().fit(tr)
+    concept = ConceptMean().fit(tr)
+
+    class Noise:
+        name = "noise"
+        rng = np.random.default_rng(0)
+
+        def predict(self, seq):
+            return self.rng.uniform(0.2, 0.8, len(seq))
+
+    stack = Stacked(models=[heuristic, concept, Noise()]).fit(va)
+    params = stack.params()
+    assert params["components"] == ["mastery_heuristic", "concept_mean", "noise"]
+    assert abs(params["weights"][2]) < 0.2  # the noise carries no weight
+
+    blended = summarize(*stack.predict_dataset(te))
+    alone = summarize(*heuristic.predict_dataset(te))
+    assert blended.log_loss <= alone.log_loss + 1e-3
+
+
+def test_a_blend_refuses_to_predict_before_it_is_fitted(small_split):
+    from sabelia.models.stacking import Stacked
+
+    tr, _, te = small_split
+    stack = Stacked(models=[MasteryHeuristic().fit(tr)])
+    with pytest.raises(RuntimeError):
+        stack.predict(te.sequences[0])
+
+
+def test_item_mean_predicts_the_question_not_the_concept(small_split):
+    """The baseline the benchmark was missing: one number per item."""
+    tr, _, te = small_split
+    model = ItemMean().fit(tr)
+
+    assert summarize(*model.predict_dataset(te)).auc > 0.5
+    # two events on the same item get the same answer, whoever the learner is
+    s = te.sequences[0]
+    p = model.predict(s)
+    for i in set(s.item.tolist()):
+        same = p[s.item == i]
+        assert np.allclose(same, same[0])

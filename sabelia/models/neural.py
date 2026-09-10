@@ -27,7 +27,7 @@ work; ensembles are available by training several seeds and averaging in
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 import numpy as np
 
@@ -67,14 +67,21 @@ class Batch:
     )  # [B, T] float log-ms of the event at t (memory feature; never a query feature)
     hints_now: torch.Tensor  # [B, T] long hints on the event at t
     prior_seen: torch.Tensor  # [B, T] float log1p prior exposures of this concept
+    #: How often this item and this concept are answered correctly, from the
+    #: training split alone. Known before the answer, so it belongs to the
+    #: query; without it the model has no way to tell a hard question from an
+    #: easy one except through an embedding it has to learn from scratch.
+    item_rate: torch.Tensor  # [B, T] float
+    concept_rate: torch.Tensor  # [B, T] float
     mask: torch.Tensor  # [B, T] bool: real positions
 
     def to(self, device) -> Batch:
         return Batch(**{k: v.to(device) for k, v in self.__dict__.items()})
 
 
-def make_batch(seqs: list[Sequence], max_len: int) -> Batch:
+def make_batch(seqs: list[Sequence], max_len: int, rates: Rates | None = None) -> Batch:
     T = min(max_len, max(len(s) for s in seqs))
+    rates = rates or Rates()
 
     def shifted(a: np.ndarray, fill):
         return np.concatenate([[fill], a[:-1]])
@@ -91,8 +98,36 @@ def make_batch(seqs: list[Sequence], max_len: int) -> Batch:
         response_now=_pad([s.response_log_ms for s in seqs], T, np.float32),
         hints_now=_pad([s.hints.astype(np.int64) for s in seqs], T, np.int64),
         prior_seen=_pad([np.log1p(s.prior_seen.astype(np.float32)) for s in seqs], T, np.float32),
+        item_rate=_pad([rates.for_items(s) for s in seqs], T, np.float32),
+        concept_rate=_pad([rates.for_concepts(s) for s in seqs], T, np.float32),
         mask=_pad([np.ones(len(s), dtype=bool) for s in seqs], T, bool, False),
     )
+
+
+@dataclass
+class Rates:
+    """Difficulty tables, fitted on the training split and carried with the model."""
+
+    item: dict[int, float] = field(default_factory=dict)
+    concept: dict[int, float] = field(default_factory=dict)
+    base: float = 0.5
+
+    def for_items(self, seq: Sequence) -> np.ndarray:
+        return np.array([self.item.get(int(i), self.base) for i in seq.item], dtype=np.float32)
+
+    def for_concepts(self, seq: Sequence) -> np.ndarray:
+        return np.array([self.concept.get(int(c), self.base) for c in seq.concept], dtype=np.float32)
+
+    def as_dict(self) -> dict:
+        return {"item": self.item, "concept": self.concept, "base": self.base}
+
+    @classmethod
+    def fitted(cls, train) -> Rates:
+        from sabelia.models.features import _encode  # noqa: PLC0415
+
+        item, base = _encode(train, "item")
+        concept, _ = _encode(train, "concept")
+        return cls(item=item, concept=concept, base=base)
 
 
 # ── configs ──────────────────────────────────────────────────────────────
@@ -117,7 +152,18 @@ class SabeliaConfig:
     use_forgetting: bool = True
     use_response: bool = True
     use_hints: bool = True
-    use_item: bool = True
+    #: The difficulty of the question being asked, as a number rather than as
+    #: an embedding to be discovered. A per-item mean alone beats this model
+    #: by 0.078 AUC on EdNet, so the signal is there and the model was not
+    #: reading it.
+    use_difficulty: bool = True
+    #: Off by default since 2026-09-09: an item embedding is the only ablation
+    #: that ever moved the same way on every seed of a dataset, and it moved
+    #: *against* keeping it — +0.0033 AUC on all three Duolingo seeds, and
+    #: five of six seeds across Duolingo and EdNet. It is also most of the
+    #: model: 862k parameters against 90k without it. Set it back to True to
+    #: reproduce anything published before that date.
+    use_item: bool = False
 
 
 # ── DKT ──────────────────────────────────────────────────────────────────
@@ -193,6 +239,9 @@ class Sabelia(nn.Module):
             nn.Dropout(cfg.dropout),
             nn.Linear(d, 1),
         )
+        self.difficulty = (
+            nn.Sequential(nn.Linear(2, d), nn.GELU(), nn.Linear(d, d)) if cfg.use_difficulty else None
+        )
         self.drop = nn.Dropout(cfg.dropout)
 
     def _interaction(self, b: Batch) -> torch.Tensor:
@@ -220,6 +269,9 @@ class Sabelia(nn.Module):
         memory = self.encoder(x, mask=causal, src_key_padding_mask=~b.mask)
         # query: the concept about to be answered, with its exposure count and gaps
         q = self.concept(b.concept) + self.exposure(b.prior_seen.unsqueeze(-1)) + self.pos(pos)
+        if self.difficulty is not None:
+            # what is being asked, not how it went: safe in the query
+            q = q + self.difficulty(torch.stack([b.item_rate, b.concept_rate], dim=-1))
         if self.time is not None:
             q = q + self.time(torch.stack([b.gap, b.gap_concept], dim=-1))
         q = self.query_norm(q)
@@ -267,6 +319,7 @@ class NeuralModel:
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self.net.to(self.device)
         self.temperature = 1.0
+        self.rates = Rates()
 
     @property
     def max_len(self) -> int:
@@ -276,7 +329,7 @@ class NeuralModel:
         return sum(p.numel() for p in self.net.parameters())
 
     def logits(self, seqs: list[Sequence], train: bool = False) -> tuple[torch.Tensor, Batch]:
-        b = make_batch(seqs, self.max_len).to(self.device)
+        b = make_batch(seqs, self.max_len, self.rates).to(self.device)
         self.net.train(train)
         return self.net(b), b
 
@@ -285,7 +338,7 @@ class NeuralModel:
         self, seqs: list[Sequence], samples: int = 1
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Returns (mean_p, std_p, mask) over MC-dropout samples, on the last `max_len` events."""
-        b = make_batch(seqs, self.max_len).to(self.device)
+        b = make_batch(seqs, self.max_len, self.rates).to(self.device)
         outs = []
         self.net.train(samples > 1)  # dropout on only when sampling
         for _ in range(samples):
@@ -299,23 +352,59 @@ class NeuralModel:
         )
 
     def predict(self, seq: Sequence) -> np.ndarray:
-        mean, _, mask = self.predict_batch([seq])
-        out = mean[0][mask[0]]
-        if len(out) < len(seq):  # sequence longer than the window: pad the head with the base rate
-            out = np.concatenate([np.full(len(seq) - len(out), 0.5), out])
+        """One probability per event, for a sequence of any length.
+
+        The network sees `max_len` events at a time, so a longer learner is
+        predicted in overlapping windows: each window keeps only the half it
+        has real history for, and the first window keeps everything. Padding
+        the head with 0.5 — what this did before — quietly answered "no idea"
+        for every event older than the window, which on EdNet is most of a
+        long learner's history.
+        """
+        total = len(seq)
+        if total <= self.max_len:
+            mean, _, mask = self.predict_batch([seq])
+            return mean[0][mask[0]].astype(np.float64)
+
+        out = np.empty(total, dtype=np.float64)
+        step = max(1, self.max_len // 2)
+        filled = 0
+        start = 0
+        while filled < total:
+            end = min(start + self.max_len, total)
+            mean, _, mask = self.predict_batch([seq.window(start, end)])
+            window = mean[0][mask[0]]
+            out[filled:end] = window[filled - start :]
+            filled = end
+            if end == total:
+                break
+            start = min(start + step, total - self.max_len)
         return out
 
     def predict_dataset(self, ds: Dataset, batch_size: int = 64) -> tuple[np.ndarray, np.ndarray]:
+        """Every event of every sequence, so the score covers what the baselines' does.
+
+        Batching short sequences together is the fast path; anything longer
+        than the window goes through `predict`, which walks it in windows.
+        Scoring only the last `max_len` events — the old behaviour — compared
+        neural models with baselines on different event sets, and the events
+        it dropped were the early ones, where a learner is hardest to predict.
+        """
         ys, ps = [], []
-        seqs = sorted(ds.sequences, key=len)
-        for i in range(0, len(seqs), batch_size):
-            chunk = seqs[i : i + batch_size]
+        short = sorted((s for s in ds.sequences if len(s) <= self.max_len), key=len)
+        for i in range(0, len(short), batch_size):
+            chunk = short[i : i + batch_size]
             mean, _, mask = self.predict_batch(chunk)
             for j, s in enumerate(chunk):
                 p = mean[j][mask[j]]
-                y = s.correct.astype(np.float64)[-len(p) :]
-                ys.append(y)
+                ys.append(s.correct.astype(np.float64)[-len(p) :])
                 ps.append(p.astype(np.float64))
+        for s in ds.sequences:
+            if len(s) > self.max_len:
+                ys.append(s.correct.astype(np.float64))
+                ps.append(self.predict(s))
+        if not ys:
+            return np.array([]), np.array([])
         return np.concatenate(ys), np.concatenate(ps)
 
     def calibrate(self, val: Dataset) -> float:
@@ -351,6 +440,7 @@ class NeuralModel:
             "n_items": self.n_items,
             "config": asdict(self.cfg),
             "temperature": self.temperature,
+            "rates": self.rates.as_dict(),
             "weights": {k: v.cpu() for k, v in self.net.state_dict().items()},
         }
 
@@ -359,6 +449,12 @@ class NeuralModel:
         m = cls(state["kind"], state["n_concepts"], state["n_items"], state["config"], device=device)
         m.net.load_state_dict(state["weights"])
         m.temperature = float(state.get("temperature", 1.0))
+        saved = state.get("rates") or {}
+        m.rates = Rates(
+            item={int(k): float(v) for k, v in (saved.get("item") or {}).items()},
+            concept={int(k): float(v) for k, v in (saved.get("concept") or {}).items()},
+            base=float(saved.get("base", 0.5)),
+        )
         m.net.eval()
         return m
 

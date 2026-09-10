@@ -24,14 +24,29 @@ not get its number.
   with the literature's cleaned numbers beside the table.
 - **Exit**: Sabelia ≥ the best logistic baseline in AUC *and* log loss on
   held-out learners of a public dataset, or the README says it is not.
-- **Status (2026-09-08): not met.** Duolingo clears both halves (0.662 AUC /
-  0.413 log loss against DAS3H's 0.603 / 0.430). EdNet clears the first and
-  fails the second: 0.660 AUC against BKT's 0.635, but 0.632 log loss against
-  BKT's 0.622 and worse ECE. The condition says *and*, so the engine has not
-  passed it, and the honest next step is calibration rather than capacity.
-  The ablations are undecided on all three datasets, paired by seed
-  (`scripts/ablation_table.py`), which leaves V1.5's forgetting work with
-  nothing to build on and a negative result to beat.
+- **Status (2026-09-09, second correction): not met, and by a wide margin on
+  EdNet.** The entry that said it was met — and the one before it that said it
+  was not — both compared the engine with a field of baselines that all model
+  the *concept*. On EdNet a concept is a tag over 12,056 questions, and the
+  question's own difficulty is the dataset's strongest signal, which no
+  baseline in the package could see. Measured against baselines that can
+  (three seeds, same splits):
+
+  | model | AUC | log loss |
+  |---|---|---|
+  | gradient boosting, 18 causal features | 0.7456 ± 0.0047 | 0.5600 |
+  | logistic regression, same features | 0.7323 ± 0.0047 | 0.5722 |
+  | per-item mean, one number per question | 0.7009 ± 0.0057 | 0.5916 |
+  | Sabelia | 0.6434 ± 0.0138 | 0.6184 |
+
+  A logistic regression over eighteen features beats the engine by 0.10 AUC
+  with a third of its seed spread. The exit condition asks for the best
+  baseline, and this is what the best baseline looks like. On Duolingo the
+  gap is much smaller (the audit measures +0.0101 for the logistic), which is
+  the dataset where a concept and an item are the same thing.
+- Found by an audit in the working tree, not by this benchmark, which is the
+  more useful finding: the benchmark was built so that its own candidate
+  could not lose.
 
 ## V1.5 — forgetting and uncertainty
 

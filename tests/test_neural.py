@@ -130,3 +130,68 @@ def test_service_serves_state_and_falls_back(split, tmp_path: Path):
     bad = create_app(model_dir=tmp_path)
     assert TestClient(bad).get("/health").json()["fallback"] is True
     _ = json  # keep import used
+
+
+def test_a_long_learner_is_predicted_everywhere_not_padded_with_half():
+    """A sequence longer than the window used to answer 0.5 for its whole head."""
+    ds = synthetic_dataset(students=6, events_per_student=140, seed=3)
+    model = NeuralModel(
+        "sabelia",
+        ds.vocab.n_concepts,
+        ds.vocab.n_items,
+        {"max_len": 32, "d_model": 16, "heads": 2, "layers": 1},
+    )
+    seq = max(ds.sequences, key=len)
+    assert len(seq) > 32
+
+    p = model.predict(seq)
+
+    assert len(p) == len(seq)
+    # the head is a real prediction, not the "no idea" constant the padding used
+    assert not np.allclose(p[: len(seq) - 32], 0.5)
+    assert np.all((p > 0) & (p < 1))
+
+
+def test_predict_and_predict_dataset_agree_on_every_event():
+    """The benchmark and the live path scored different event sets until they did."""
+    ds = synthetic_dataset(students=4, events_per_student=90, seed=5)
+    model = NeuralModel(
+        "sabelia",
+        ds.vocab.n_concepts,
+        ds.vocab.n_items,
+        {"max_len": 32, "d_model": 16, "heads": 2, "layers": 1},
+    )
+
+    y, p = model.predict_dataset(ds)
+
+    assert len(y) == ds.n_events == len(p)
+    by_hand = np.concatenate([model.predict(s) for s in ds.sequences])
+    assert np.allclose(np.sort(p), np.sort(by_hand), atol=1e-6)
+
+
+def test_difficulty_reaches_the_model_and_survives_a_checkpoint(tmp_path: Path):
+    """The question's difficulty is a number the model reads, not one it must invent."""
+    from sabelia.models.neural import NeuralModel, Rates, make_batch
+
+    ds = synthetic_dataset(students=8, events_per_student=40, seed=4)
+    tr, va, _ = split_by_student(ds, seed=0)
+    result = train(
+        tr, va, TrainConfig(model="sabelia", seed=0, epochs=1, log_every=10**6), log=lambda *_: None
+    )
+    model = result.model
+
+    assert model.rates.item and model.rates.concept
+    b = make_batch([ds.sequences[0]], model.max_len, model.rates)
+    assert b.item_rate.shape == b.concept.shape
+    assert float(b.item_rate.min()) != float(b.item_rate.max())  # a real table varies
+
+    path = tmp_path / "m.pt"
+    torch.save(model.state(), path)
+    back = NeuralModel.from_state(torch.load(path, weights_only=False))
+    assert back.rates.base == model.rates.base
+    assert np.allclose(back.predict(ds.sequences[0]), model.predict(ds.sequences[0]), atol=1e-6)
+
+    # an unfitted table answers with the neutral rate, not with a number it
+    # does not have
+    bare = make_batch([ds.sequences[0]], 32, Rates())
+    assert float(bare.item_rate.min()) == float(bare.item_rate.max()) == 0.5
